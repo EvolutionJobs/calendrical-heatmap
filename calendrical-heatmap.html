@@ -1,0 +1,559 @@
+<link rel="import" href="../../lib/polymer/polymer-element.html">
+<dom-module id="calendrical-heatmap" strip-whitespace>
+    <template>
+        <style>
+            :host {
+                display: inline-block;
+                box-sizing: border-box;
+                background-color: var(--content-background-colour);
+                color: var(--content-foreground-colour);
+                /*
+                    --highlight-colour: var(--main-colour)
+                    --heat-colour: var(--accent-block-colour);*/
+                --label-font-size: 10px;
+            }
+
+            #calendricalHeatmapBody {
+                margin: 8px 8px 0 8px;
+            }
+
+            svg.calendrical-heatmap {
+            }
+
+                svg.calendrical-heatmap rect.day {
+                    fill: var(--gutter-background-colour);
+                    box-sizing: border-box;
+                }
+
+                    svg.calendrical-heatmap rect.day:hover {
+                        stroke: var(--highlight-colour, var(--main-colour));
+                        stroke-width: 2px;
+                        stroke-opacity: 1;
+                    }
+
+                    svg.calendrical-heatmap rect.day.heat-1 {
+                        fill: var(--heat-colour, var(--accent-block-colour));
+                        fill-opacity: .2;
+                    }
+
+                    svg.calendrical-heatmap rect.day.heat-2 {
+                        fill: var(--heat-colour, var(--accent-block-colour));
+                        fill-opacity: .5;
+                    }
+
+                    svg.calendrical-heatmap rect.day.heat-3 {
+                        fill: var(--heat-colour, var(--accent-block-colour));
+                        fill-opacity: .8;
+                    }
+
+                    svg.calendrical-heatmap rect.day.heat-4 {
+                        fill: var(--heat-colour, var(--accent-block-colour));
+                    }
+
+                    svg.calendrical-heatmap rect.day.best-streak {
+                        stroke: var(--highlight-colour, var(--main-colour));
+                        stroke-width: 1px;
+                        stroke-opacity: .5;
+                    }
+
+
+                svg.calendrical-heatmap text.day-label {
+                    font-size: var(--label-font-size);
+                    fill: var(--content-foreground-colour);
+                    fill-opacity: .8;
+                }
+
+                svg.calendrical-heatmap text.month-label {
+                    font-size: var(--label-font-size);
+                    fill: var(--content-foreground-colour);
+                    fill-opacity: .8;
+                }
+
+            #calendricalHeatmapFooter {
+                font-size: var(--label-font-size);
+                margin: 8px;
+                overflow: hidden;
+                height: 23px;
+            }
+
+            #legend {
+                float: right;
+                color: var(--content-foreground-colour);
+                box-sizing: border-box;
+                margin: .5em;
+            }
+
+            #legendKey {
+                position: relative;
+                bottom: -1px;
+                display: inline-block;
+                margin: 0 5px;
+                list-style: none;
+                box-sizing: border-box;
+                padding: 0;
+            }
+
+                #legendKey > li {
+                    display: inline-block;
+                    width: 10px;
+                    height: 10px;
+                    box-sizing: border-box;
+                }
+
+                    #legendKey > li.heat-0 {
+                        background-color: var(--gutter-background-colour);
+                    }
+
+                    #legendKey > li.heat-1 {
+                        background-color: var(--heat-colour, var(--accent-block-colour));
+                        opacity: .2;
+                    }
+
+                    #legendKey > li.heat-2 {
+                        background-color: var(--heat-colour, var(--accent-block-colour));
+                        opacity: .5;
+                    }
+
+                    #legendKey > li.heat-3 {
+                        background-color: var(--heat-colour, var(--accent-block-colour));
+                        opacity: .8;
+                    }
+
+                    #legendKey > li.heat-4 {
+                        background-color: var(--heat-colour, var(--accent-block-colour));
+                    }
+
+            #summary {
+                color: var(--content-foreground-colour);
+                margin: .5em;
+                float: left;
+            }
+
+            #calendricalHeatmapStreak {
+                margin: .5em;
+                display: none;
+                float: left;
+            }
+
+            .streak-total {
+                font-weight: bold;
+            }
+
+        </style>
+
+        <div id="calendricalHeatmapBody"></div>
+        <div id="calendricalHeatmapFooter">
+            <div id="summary">[[totalText]]</div>
+            <div id="calendricalHeatmapStreak" on-mouseover="_highlightBest" on-mouseout="_highlightClear">
+                Current Streak: <span class="streak-total">[[streak]]</span>, Best: <span class="streak-total">[[streakBest]]</span> days in a row.
+            </div>
+            <div id="legend" title="[[description]]">
+                Less
+                <ul id="legendKey">
+                    <li class="heat-0"></li>
+                    <li class="heat-1"></li>
+                    <li class="heat-2"></li>
+                    <li class="heat-3"></li>
+                    <li class="heat-4"></li>
+                </ul>
+                More
+            </div>
+        </div>
+    </template>
+    <script>
+        /** Convert the input to a date
+         * @param {string|number|Date} input The input value to get.
+         * @returns {Date} The input as a date. */
+        function toDate(input) {
+            if (typeof input === 'string' || typeof input === 'number')
+                return new Date(input);
+
+            return input;
+        }
+
+        /** Convert a date into a string that can be sorted and day-compared easily.
+         * @param {Date} input The date to format.
+         * @returns {string} The date as a string formatted yyyy-mm-dd */
+        function toInvariantString(input) {
+            if (!date)
+                return null;
+
+            if (typeof date === 'number')
+                date = new Date(date);
+
+            if (typeof date === 'string')
+                date = new Date(date);
+
+            if (!date)
+                return null;
+
+            const yyyy = date.getFullYear();
+            const mm = (date.getMonth() + 101).toString().substring(1); // 0-indexed month (0-11 rather than 1-12)
+            const dd = (date.getDate() + 100).toString().substring(1); // Add 100 and skip first char to get leading '0''
+
+            // Input expects yyyy-mm-dd
+            return `${yyyy}-${mm}-${dd}`;
+        }
+
+        /** Display data over time as a calendar of heat mapped values */
+        class CalendricalHeatmap extends Polymer.Element {
+            static get is() { return 'calendrical-heatmap'; }
+            static get properties() {
+                return {
+                    start: { type: Date, value: null, reflectToAttribute: false },
+                    end: { type: Date, value: null, reflectToAttribute: false },
+                    daySize: { type: Number, value: 10 },
+                    gutterSize: { type: Number, value: 2 },
+                    description: { type: String, value: 'A summary of activity by calendar.' },
+                    totalText: { type: String, value: null },
+                    itemText: { type: String, value: '' },
+                    streak: { type: Number, value: 0, reflectToAttribute: true },
+                    streakBest: { type: Number, value: 0, reflectToAttribute: true },
+                    streakBestIndex: { type: Number, value: 0, reflectToAttribute: false },
+                    holidays: { type: Set, value: null, reflectToAttribute: false }
+                };
+            }
+
+            /** Set default values for start and end if not set */
+            _init() {
+                // If end set to a non-date value convert it first
+                if (typeof this.end === 'string' || typeof this.end === 'number')
+                    this.end = new Date(this.end);
+
+                // If not set to a valid date end is today
+                if (!this.end || isNaN(this.end.getTime()))
+                    this.end = new Date();
+
+                // If start set to a non-date value convert it first
+                if (typeof this.start === 'string' || typeof this.start === 'number')
+                    this.start = new Date(this.start);
+
+                // If not set to a valid date start is 1 year ago
+                if (!this.start || isNaN(this.start.getTime()))
+                    this.start = new Date(this.end.getFullYear() - 1, this.end.getMonth(), this.end.getDate())
+            }
+
+            /** Highlight all the days that were part of the longest streak. */
+            _highlightBest() {
+                const inBestStreak = this.$.calendricalHeatmapBody.querySelectorAll(`rect[data-streak-index='${this.streakBestIndex}']`);
+                for (const rect of inBestStreak)
+                    // SVG elements have the CSS classlist on the element
+                    rect.classList.add('best-streak');
+            }
+
+            /** Remove the best-streak highlight, where present. */
+            _highlightClear() {
+                const inBestStreak = this.$.calendricalHeatmapBody.querySelectorAll(`rect.best-streak`);
+                for (const rect of inBestStreak)
+                    // SVG elements have the CSS classlist on the element
+                    rect.classList.remove('best-streak');
+            }
+
+            /** Build an array of dates between the start and the end, including week numbers and a formatted string we can look up later. */
+            *_buildDays() {
+                let current = new Date(this.start.getFullYear(), this.start.getMonth(), this.start.getDate());
+                let week = 0;
+                while (current < this.end) {
+                    const dayOfWeek = current.getDay();
+                    if (dayOfWeek === 0)
+                        week++;
+
+                    const d = {
+                        date: new Date(current.getTime()),
+                        week,
+                        dayOfWeek,
+                        dateString: toInvariantString(current)
+                    };
+
+                    yield d;
+
+                    // Add one day to the current date
+                    current.setDate(current.getDate() + 1);
+                }
+            }
+
+            /** Render DOM for a day as an SVG <rect>
+             * @param {!object} day The day properties to set.
+             * @returns {SVGElement} The SVG <rect> DOM element. */
+            _renderDay(day) {
+                // <rect class="day" width="10" height="10" x="11" y="0" fill="#ebedf0" data-count="0" data-date="2016-07-17"></rect>
+                const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+                rect.setAttribute('class', 'day');
+                rect.setAttribute('width', this.daySize);
+                rect.setAttribute('height', this.daySize);
+                rect.setAttribute('x', 0);
+                rect.setAttribute('y', day.dayOfWeek * (this.daySize + this.gutterSize));
+                rect.setAttribute('data-day-week', day.dayOfWeek);
+                rect.setAttribute('data-date', day.dateString); 
+                rect.setAttribute('data-count', 0);
+
+                return rect;
+            }
+
+            /** Render DOM for a week as an SVG <g> group with days as a column of <rect>
+             * @param {!object[]} week The array or iterable holding the days in this week.
+             * @param {!number} index The index of this week within the calendar panel.
+             * @returns {SVGElement} The SVG <g> DOM element. */
+            _renderWeek(week, index) {
+                // <g transform="translate(week * 12, 0)">
+                const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+                g.setAttribute('transform', `translate(${index * (this.daySize + this.gutterSize)}, 0)`);
+                g.setAttribute('data-week', index);
+                for (const d of week)
+                    g.appendChild(this._renderDay(d));
+
+                return g;
+            }
+
+            /** Generate iteration of SVG <g> and <text> elements holding the weeks and month labels.
+             * @param {!object[]} days The array or iterable holding all the days in the range.
+             * @returns Iteration of SVG elements to render. */
+            *_renderWeeks(days) {
+                let weekBuffer = [];
+                let weekIndex = 0;
+                let currentMonth = 'none';
+                for (const day of days) {
+                    // If the month name has changed yield a label offset by the current number of weeks
+                    const monthName = day.date.toLocaleDateString(navigator.language, { month: 'short' });
+                    if (currentMonth !== monthName) {
+                        currentMonth = monthName;
+                        yield this._renderMonthLabel(monthName, weekIndex);
+                    }
+
+                    // If the day is in the current week add it to the buffer
+                    if (weekIndex === day.week)
+                        weekBuffer.push(day);
+                    else {
+                        // We're in a new week, render the current buffer and reset it
+                        yield this._renderWeek(weekBuffer, weekIndex);
+
+                        weekIndex++;
+                        weekBuffer = [day];
+                    }
+                }
+
+                // Render whatever's left in the buffer
+                yield this._renderWeek(weekBuffer, weekIndex);
+            }
+
+            /** Render DOM for a day label as an SVG <text>
+             * @param {!string} name The name for the day.
+             * @param {!number} index The index of the day 0-6.
+             * @param {boolean} [hide=false] Optional flag to add the text but hide it.
+             * @returns {SVGElement} The SVG <text> DOM element. */
+            _renderDayLabel(name, index, hide = false) {
+
+                //<text text-anchor="start" class="wday" dx="-14" dy="20">Mon</text>
+                const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+                text.setAttribute('textAnchor', 'start');
+                text.setAttribute('class', 'day-label');
+                text.setAttribute('dx', -24);
+                text.setAttribute('dy', 8 + index * (this.daySize + this.gutterSize));
+
+                if (hide)
+                    text.style.display = 'none';
+
+                text.appendChild(document.createTextNode(name));
+
+                return text;
+            }
+
+            /** Render DOM for a month label as an SVG <text>
+             * @param {!string} name The name for the month.
+             * @param {!number} offset The offset in relative pixels from the start of the period.
+             * @returns {SVGElement} The SVG <text> DOM element. */
+            _renderMonthLabel(name, offset) {
+                // <text x="589" y="-10" class="month">Jun</text>
+                const text = document.createElementNS('http://www.w3.org/2000/svg','text');
+                text.setAttribute('class', 'month-label');
+                text.setAttribute('x', offset * (this.daySize + this.gutterSize));
+                text.setAttribute('y', -10);
+
+                text.appendChild(document.createTextNode(name));
+
+                return text;
+            }
+
+            /** Render DOM for the calendar chart as an <svg> element.
+             * @param {!object[]} days The array or iterable holding all the days in the range.
+             * @returns {SVGElement} The SVG <svg> DOM element. */
+            _buildSvg(days) {
+                const weeks = [...this._renderWeeks(days)];
+
+                // TODO: this should use toLocaleDateString to get the localised day name
+                weeks.push(this._renderDayLabel('Sun', 0, true));
+                weeks.push(this._renderDayLabel('Mon', 1));
+                weeks.push(this._renderDayLabel('Tue', 2, true));
+                weeks.push(this._renderDayLabel('Wed', 3));
+                weeks.push(this._renderDayLabel('Thu', 4, true));
+                weeks.push(this._renderDayLabel('Fri', 5));
+                weeks.push(this._renderDayLabel('Sat', 6, true));
+
+                // Add the weeks to an offset wrapper so we have space for the legend
+                const wrapper = document.createElementNS('http://www.w3.org/2000/svg','g');
+                wrapper.setAttribute('transform', `translate(24, 20)`);
+                for(const w of weeks)
+                    wrapper.appendChild(w);
+
+                // Calc explicit width and height
+                const width = 24 + (days[days.length - 1].week + 1) * (this.daySize + this.gutterSize); // Day label + no. weeks * day size
+                const height = 20 + 7 * (this.daySize + this.gutterSize); // Month label + no. days * day size
+
+                // <svg width="676" height="104" class="js-calendar-graph-svg">
+                const svgHeatmap = document.createElementNS('http://www.w3.org/2000/svg','svg');
+                svgHeatmap.setAttribute('width', width);
+                svgHeatmap.setAttribute('height', height);
+                svgHeatmap.setAttribute('class', 'calendrical-heatmap');
+                svgHeatmap.appendChild(wrapper);
+
+                // Add to the shadow DOM
+                while (this.$.calendricalHeatmapBody.firstChild)
+                    this.$.calendricalHeatmapBody.removeChild(this.$.calendricalHeatmapBody.firstChild);
+
+                this.$.calendricalHeatmapBody.appendChild(svgHeatmap);
+
+                // Explicitly set the parent width
+                this.$.calendricalHeatmapBody.style.width = svgHeatmap.getBoundingClientRect().width + 'px';
+            }
+
+            /** Calculate the current day-range and draw the CSV */
+            _render() {
+                const days = [...this._buildDays()];
+                this._buildSvg(days);
+            }
+
+            /** Get whether the date is an allowed day-off that doesn't break the streak.
+             * @param {Date} date The date to check.
+             * @returns {boolean} true if the day can be missed without breaking the streak, false otherwise. */
+            _isDayOff(date) {
+                if (date.getDay() === 0)
+                    // Sunday
+                    return true;
+                else if (date.getDay() === 6)
+                    // Saturday
+                    return true;
+
+                if (this.holidays && this.holidays.has(toInvariantString(date)))
+                    // Allowed holidays don't break the streak
+                    return true;
+
+                return false;
+            }
+
+            /** Get the next date there must be activity on in order for the streak to be unbroken
+             * @param {Date} date The current date in the streak.
+             * @returns {Date} The next expected date in the streak. */
+            _getNextStreakDate(date) {
+                if (date.getDay() === 5)
+                    // Current day is Friday, so next day for streak is the following Monday
+                    date.setDate(date.getDate() + 3);
+                else
+                    date.setDate(date.getDate() + 1);
+
+                // Skip days off
+                while (this._isDayOff(date))
+                    date.setDate(date.getDate() + 1);
+
+                return date;
+            }
+
+            /** Apply the data provided to the SVG to render the heat map.
+             * @param {!object[]} heatMap The heat map data to set.
+             * @param {boolean} [calculateStreak = false] Whether to calculate the streak as we build the map, default is false. */
+            setData(heatMap, calculateStreak = false) {
+                if (this.mapApplied)
+                    // If a map has been applied before re-render first
+                    this._render();
+
+                const max = Math.max(...heatMap.map(h => h.total));
+                let total = 0;
+                let nextDayForStreak = new Date(0);
+                let currentStreak = 0, maxStreak = 0, streakIndex = 0, maxStreakIndex = 0;
+
+                if (calculateStreak) {
+                    this.$.calendricalHeatmapStreak.style.display = 'block';
+
+                    // If calculating a streak then dates need to be oldest first, so sort the heat map
+                    // Dates are string format (yyyy-mm-dd) so string comparison will work
+                    heatMap.sort((a, b) => a.date.localeCompare(b.date));
+                }
+                else
+                    this.$.calendricalHeatmapStreak.style.display = 'none';
+
+                for (const h of heatMap) {
+                    const dayRect = this.$.calendricalHeatmapBody.querySelector(`rect[data-date='${h.date}']`);
+                    if (!dayRect)
+                        continue;
+
+                    const currentDate = new Date(h.date);
+
+                    let heatIdx = 1;
+                    if (h.total > max * .8)
+                        heatIdx = 4;
+                    else if (h.total > max * .5)
+                        heatIdx = 3;
+                    else if (h.total > max * .2)
+                        heatIdx = 2;
+
+                    dayRect.setAttribute('data-count', h.total);
+                    dayRect.classList.add(`heat-${heatIdx}`); //SVG have classList on element directly, not in .style property
+
+                    const tooltip =  document.createElementNS('http://www.w3.org/2000/svg','title');
+                    tooltip.appendChild(document.createTextNode(`${h.total.toLocaleString()} ${this.itemText} on ${currentDate.toLocaleDateString(navigator.language, { month: 'short', year: 'numeric', day: 'numeric' })}`));
+                    dayRect.appendChild(tooltip);
+
+                    total += h.total;
+
+                    if (!calculateStreak)
+                        continue;
+
+                    // For the streak to continue either this must be the next expected streak date,
+                    // or before it (so current date is weekend or other allowed skip)
+
+                    if (nextDayForStreak.toDateString() === currentDate.toDateString() ||
+                        nextDayForStreak > currentDate) {
+                        currentStreak++;
+
+                        // If we're the new longest streak update the max vals
+                        if (currentStreak > maxStreak) {
+                            maxStreak = currentStreak;
+                            maxStreakIndex = streakIndex;
+                        }
+                    }
+                    else {
+                        currentStreak = 1;
+                        streakIndex++;
+                    }
+
+                    dayRect.setAttribute('data-streak', currentStreak);
+                    dayRect.setAttribute('data-streak-index', streakIndex);
+
+                    nextDayForStreak = this._getNextStreakDate(currentDate);
+                }
+
+                if (calculateStreak) {
+                    // Is today the next streak date? If not then we're currently on a break.
+                    const today = new Date();
+                    if (!(nextDayForStreak.toDateString() === today.toDateString() ||
+                        nextDayForStreak > today))
+                        currentStreak = 0;
+
+                    this.streak = currentStreak;
+                    this.streakBest = maxStreak;
+                    this.streakBestIndex = maxStreakIndex;
+                }
+
+                this.totalText = `${total.toLocaleString()} ${this.itemText} since ${this.start.toLocaleDateString(navigator.language, { month: 'short', year: 'numeric', day: 'numeric' })}`;
+                this.mapApplied = true;
+            }
+
+            ready() {
+                super.ready();
+                this._init();
+                this._render();
+            }
+        }
+
+        customElements.define(CalendricalHeatmap.is, CalendricalHeatmap);
+    </script>
+</dom-module>
