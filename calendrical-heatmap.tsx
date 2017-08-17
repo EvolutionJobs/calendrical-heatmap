@@ -24,17 +24,6 @@
         streakIndex: number;
     }
 
-    const foo1 = <div id="foo1" key="foo">
-        <div key="a">A from 1</div>
-        <div key="b">B from 1</div>
-        <div key="c">C from 1</div>
-        <button onclick={() => alert('Please do not press this again')} style={{ backgroundColor: 'red' }}>
-            Press Me
-    </button>
-    </div>;
-
-    const foo2 = <div>{foo1}</div>;
-
     export class CalendricalHeatmap extends Polymer.Element {
         static get is() { return 'calendrical-heatmap'; }
         static get properties() {
